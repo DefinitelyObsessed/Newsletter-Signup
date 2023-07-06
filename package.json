@@ -1,5 +1,5 @@
 {
-  "name": "newsletter-signup",
+  "name": "todolist-v1",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
@@ -9,9 +9,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "body-parser": "^1.20.1",
-    "dotenv": "^16.0.3",
-    "express": "^4.18.2",
-    "request": "^2.88.2"
+    "body-parser": "^1.18.3",
+    "dotenv": "^16.3.1",
+    "ejs": "^2.6.1",
+    "express": "^4.16.3",
+    "lodash": "^4.17.21",
+    "mongoose": "^7.3.1"
   }
 }

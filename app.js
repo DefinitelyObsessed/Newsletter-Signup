@@ -1,79 +1,201 @@
-//jshint esversion: 6
 
 const express = require("express");
 const bodyParser = require("body-parser");
-const request = require("request");
-const https = require("https");
+const mongoose = require("mongoose");
+const _ = require("lodash");
 require('dotenv').config();
 
-// console.log(process.env);
-
-const apiKey = process.env.API_KEY;
-const apiServer = process.env.API_SERVER;
-const listID = process.env.LIST_ID;
 
 const app = express();
 
+app.set('view engine', 'ejs');
+
+app.use(bodyParser.urlencoded({extended: true}));
 app.use(express.static("public"));
-app.use(bodyParser.urlencoded({
-  extended: true
-}));
 
-app.get("/", function(req, res) {
-  res.sendFile(__dirname + "/signup.html");
-})
+const username = process.env.USER_NAME ;
+const password = process.env.PASS_WORD ;
 
-app.post("/", function(req, res) {
+const url = "mongodb+srv://"+ username + ":"+ password + "@cluster0.mgc31zu.mongodb.net/todolistDB" ;
 
-  const firstName = req.body.fName;
-  const lastName = req.body.lName;
-  const email = req.body.email;
+mongoose.connect( url , { useNewUrlParser: true }) ;
 
-  const data = {
-    members: [{
-      email_address: email,
-      status: "subscribed",
-      merge_fields: {
-        FNAME: firstName,
-        LNAME: lastName
-      }
-    }]
-  };
-
-  const jsonData = JSON.stringify(data);
-
-  const url = "https://" + apiServer + ".api.mailchimp.com/3.0/lists/" + listID;
-
-  const options = {
-    method: "POST",
-    auth: "RP:" + apiKey
-  }
-
-  const request = https.request(url, options, function(response) {
-
-    if (response.statusCode === 200) {
-      res.sendFile(__dirname + "/success.html");
-    } else {
-      res.sendFile(__dirname + "/failure.html");
-    }
-
-    response.on("data", function(data) {
-      console.log(JSON.parse(data));
-    })
-  })
-
-  request.write(jsonData);
-  request.end();
-
+const itemsSchema = new mongoose.Schema({
+      name: String
 });
 
-app.post("/failure", function(req, res) {
-  res.redirect("/");
-})
+
+const Item = mongoose.model( "Item", itemsSchema );
+
+const item1 = new Item ({
+      name: "Welcome to your todolist"
+});
+
+const item2 = new Item ({
+      name: "Hit the + button to add a new item"
+});
+
+const item3 = new Item ({
+      name: "<-- Hit this to delete an item"
+});
+
+
+const defaultItems = [item1, item2, item3];
+
+
+const listSchema = new mongoose.Schema({
+      name: String,
+      items: [itemsSchema]
+});
+
+
+const List = mongoose.model( "List", listSchema );
+
+
+
+
+
+app.get("/", function(req, res) {
+
+      Item.find({}).then((foundItems)=>{
+
+            if(foundItems.length === 0){
+
+                  Item.insertMany(defaultItems).then((result)=>{
+                        console.log("Successfully saved  default items to DB " )
+                  }).catch((err)=>{
+                        console.log(err);
+                  });
+
+                  res.redirect("/");
+            } else {
+
+                  res.render("list", {listTitle: "Today", newListItems: foundItems});
+            }
+      }).catch((err)=>{
+            console.log(err);
+      });
+
+
+
+      // Item.find({}).then((foundItems)=>{
+      //       let foundItemArray = [] ;
+      //       foundItems.forEach((foundItem)=>{
+      //             let foundItemNames = foundItem.name;
+      //             foundItemArray.push(foundItemNames);
+      //       });
+      //       console.log(foundItemArray);
+      //       res.render("list", {listTitle: "Today", newListItems: foundItemArray});
+      // }).catch((err)=>{
+      //       console.log(err);
+      // });
+});
+
+
+
+app.post("/", function(req, res){
+
+      const itemName = req.body.newItem ;
+      const listName = req.body.list ;
+
+      const item = new Item ({
+            name: itemName
+      });
+
+      if(listName === "Today"){
+            item.save();
+            res.redirect("/");
+      } else {
+            List.findOne({name: listName}).then((foundList)=>{
+                  foundList.items.push(item);
+                  foundList.save();
+                  res.redirect("/" + listName);
+            });
+      }
+
+
+      // Item.insertMany(item4).then((result)=>{
+      //       console.log("Successfully saved  next item to DB")
+      // }).catch((err)=>{
+      //       console.log(err);
+      // });
+
+
+
+
+  // const item = req.body.newItem;
+  //
+  // if (req.body.list === "Work") {
+  //   workItems.push(item);
+  //   res.redirect("/work");
+  // } else {
+  //   items.push(item);
+  //   res.redirect("/");
+  // }
+});
+
+app.post("/delete", (req, res)=>{
+      const checkedItemId = req.body.checkbox;
+      const listName = req.body.listName;
+
+
+      if(listName === "Today") {
+            Item.findByIdAndRemove(checkedItemId).then((result)=>{
+                  console.log("Successfully deleted checked item");
+                  res.redirect("/");
+            }).catch((err)=>{
+                  console.log(err);
+            });
+      } else {
+            List.findOneAndUpdate({name: listName }, {$pull: {items: {_id: checkedItemId}}}).then((foundList)=>{
+                  console.log("Successfully deleted checked item in" + listName);
+                  res.redirect("/" + listName);
+            }).catch((err)=>{
+                  console.log(err);
+            });
+      }
+});
+
+
+
+
+app.get("/:customListName", (req, res)=>{
+
+      let customListName = _.capitalize(req.params.customListName) ;
+
+      List.findOne({name: customListName}).then((foundList)=>{
+
+            if(!foundList){
+                  const list = new List ({
+                        name: customListName,
+                        items: defaultItems
+                  });
+                  list.save();
+
+                  res.redirect("/" + customListName);
+
+            } else{
+                  res.render("list", {
+                        listTitle: foundList.name ,
+                        newListItems: foundList.items
+                  });
+            }
+
+      }).catch((err)=>{
+            console.log(err);
+      });
+});
+
+
+
+
+app.get("/about", function(req, res){
+  res.render("about");
+});
 
 
 
 
 app.listen(process.env.PORT || 3000, function() {
-  console.log("Server is running in port 3000");
+  console.log("Server started on port 3000");
 });
